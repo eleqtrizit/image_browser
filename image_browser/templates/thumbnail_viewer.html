@@ -278,15 +278,12 @@
                         if (navigationDirection === -1 && '{{ prev_filename }}') {
                             // Was going backward, so continue backward
                             window.location.href = `/view/{{ prev_filename }}?size={{ current_size }}&page_size={{ current_page_size }}`;
-                        } else if (navigationDirection === 1 && '{{ next_filename }}') {
-                            // Was going forward, so continue forward
+                        } else if ('{{ next_filename }}') {
+                            // Default behavior: go to next image (forward navigation)
                             window.location.href = `/view/{{ next_filename }}?size={{ current_size }}&page_size={{ current_page_size }}`;
                         } else if ('{{ prev_filename }}') {
-                            // Default to previous image if available
+                            // Fallback to previous image if no next image available
                             window.location.href = `/view/{{ prev_filename }}?size={{ current_size }}&page_size={{ current_page_size }}`;
-                        } else if ('{{ next_filename }}') {
-                            // Otherwise go to next image
-                            window.location.href = `/view/{{ next_filename }}?size={{ current_size }}&page_size={{ current_page_size }}`;
                         } else {
                             // Otherwise go back to gallery
                             window.location.href = '/?page_size={{ current_page_size }}';
