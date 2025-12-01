@@ -1,7 +1,7 @@
 [project]
 name = "image-browser"
 version = "0.1.0"
-description = "Add your description here"
+description = "A simple Flask-based web application for browsing images in a directory with thumbnail previews"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,10 @@ dependencies = [
     "pillow>=12.0.0",
     "rich>=14.2.0",
 ]
+authors = [{name = "Your Name", email = "your.email@example.com"}]
+
+[project.scripts]
+image-browser = "image_browser.__main__:main"
 
 [dependency-groups]
 dev = [
