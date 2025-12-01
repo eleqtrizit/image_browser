@@ -13,7 +13,7 @@ test:  ## Run tests
 	pytest tests/ -v
 
 cov:  ## Run tests with coverage
-	pytest tests/ --cov=. --cov-report=html --cov-report=term-missing
+	python -m pytest tests/ --cov=image_browser --cov-report=html --cov-report=term-missing
 
 lint:  ## Run linters
 	flake8 *.py
