@@ -1,7 +1,9 @@
 import math
 import os
+import threading
+import time
 
-from flask import Flask, abort, render_template, request, send_file
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from PIL import Image
 
 # Configuration
@@ -18,8 +20,70 @@ SIZE_CONFIGS = {
     'large': (600, 600)
 }
 
+# Directory monitoring variables
+last_scan_time = None
+current_image_files = []
+directory_monitor_lock = threading.Lock()
+directory_monitor_thread = None
+monitoring_active = False
+
 # Create cache directory if it doesn't exist
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def start_directory_monitoring():
+    """Start the directory monitoring thread."""
+    global directory_monitor_thread, monitoring_active
+
+    # Initialize the cached image files
+    with directory_monitor_lock:
+        global current_image_files
+        current_image_files = get_image_files_internal()
+        global last_scan_time
+        last_scan_time = time.time()
+
+    if directory_monitor_thread is None or not directory_monitor_thread.is_alive():
+        monitoring_active = True
+        directory_monitor_thread = threading.Thread(target=monitor_directory, daemon=True)
+        directory_monitor_thread.start()
+
+
+def monitor_directory():
+    """Monitor the image directory for changes every second."""
+    global last_scan_time, current_image_files
+
+    while monitoring_active:
+        try:
+            # Get current image files
+            new_image_files = get_image_files_internal()
+
+            # Acquire lock for thread-safe access
+            with directory_monitor_lock:
+                # Check if files have changed
+                if set(new_image_files) != set(current_image_files):
+                    current_image_files = new_image_files
+                    last_scan_time = time.time()
+
+            # Wait for 1 second before next scan
+            time.sleep(1)
+        except Exception as e:
+            print(f"Error in directory monitoring: {e}")
+            time.sleep(1)  # Continue monitoring even if there's an error
+
+
+def get_image_files_internal():
+    """Get all image files from the images directory (internal version for monitoring)."""
+    extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
+    image_files = []
+
+    if os.path.exists(IMAGE_DIR):
+        for filename in os.listdir(IMAGE_DIR):
+            if filename.lower().endswith(extensions):
+                image_files.append(filename)
+
+    # Sort files alphabetically
+    image_files.sort()
+    return image_files
 
 
 def create_app(image_dir=None):
@@ -29,6 +93,9 @@ def create_app(image_dir=None):
     # Configuration
     global IMAGE_DIR
     IMAGE_DIR = image_dir if image_dir else os.getcwd()  # Use provided dir or default to current directory
+
+    # Start directory monitoring
+    start_directory_monitoring()
 
     # Register routes
     register_routes(app)
@@ -62,8 +129,9 @@ def register_routes(app):
             except ValueError:
                 images_per_page = IMAGES_PER_PAGE  # Default to 12 if not a number
 
-        # Get all image files
-        image_files = get_image_files()
+        # Get all image files from the monitored cache
+        with directory_monitor_lock:
+            image_files = current_image_files.copy()
 
         # Calculate pagination
         total_images = len(image_files)
@@ -119,6 +187,16 @@ def register_routes(app):
                                current_page_size=page_size,
                                total_images=total_images)
 
+    @app.route('/api/directory-status')
+    def directory_status():
+        """API endpoint to check directory status and last scan time."""
+        with directory_monitor_lock:
+            return jsonify({
+                'last_scan_time': last_scan_time,
+                'image_count': len(current_image_files),
+                'images': current_image_files
+            })
+
     @app.route('/cache/<filename>')
     def serve_cached_image(filename):
         """Serve a cached resized image"""
@@ -151,6 +229,12 @@ def register_routes(app):
                     cache_path = os.path.join(CACHE_DIR, cache_filename)
                     if os.path.exists(cache_path):
                         os.remove(cache_path)
+
+                # Update the cached image files list
+                with directory_monitor_lock:
+                    if filename in current_image_files:
+                        current_image_files.remove(filename)
+
                 return '', 204  # Success, no content
             except Exception as e:
                 print(f"Error deleting image {filename}: {e}")
@@ -161,8 +245,9 @@ def register_routes(app):
     @app.route('/view/<filename>')
     def view_image(filename):
         """Display a single image with navigation controls"""
-        # Get all image files
-        image_files = get_image_files()
+        # Get all image files from the monitored cache
+        with directory_monitor_lock:
+            image_files = current_image_files.copy()
 
         # Check if requested file exists
         if filename not in image_files:
@@ -238,17 +323,23 @@ def register_routes(app):
 
 def get_image_files():
     """Get all image files from the images directory"""
-    extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
-    image_files = []
+    # Return the cached image files if monitoring is active
+    if monitoring_active and directory_monitor_thread and directory_monitor_thread.is_alive():
+        with directory_monitor_lock:
+            return current_image_files.copy()
+    else:
+        # Fallback to direct directory scan if monitoring is not active
+        extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')
+        image_files = []
 
-    if os.path.exists(IMAGE_DIR):
-        for filename in os.listdir(IMAGE_DIR):
-            if filename.lower().endswith(extensions):
-                image_files.append(filename)
+        if os.path.exists(IMAGE_DIR):
+            for filename in os.listdir(IMAGE_DIR):
+                if filename.lower().endswith(extensions):
+                    image_files.append(filename)
 
-    # Sort files alphabetically
-    image_files.sort()
-    return image_files
+        # Sort files alphabetically
+        image_files.sort()
+        return image_files
 
 
 def load_caption_for_image(filename):

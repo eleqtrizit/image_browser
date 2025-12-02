@@ -148,6 +148,37 @@
     </div>
 
     <script>
+        // Store the initial last scan time to compare against
+        let lastScanTime = null;
+
+        // Function to check for directory changes
+        async function checkForChanges() {
+            try {
+                const response = await fetch('/api/directory-status');
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // If this is the first check, just store the scan time
+                    if (lastScanTime === null) {
+                        lastScanTime = data.last_scan_time;
+                        return;
+                    }
+
+                    // If the scan time has changed, refresh the page
+                    if (data.last_scan_time !== null && data.last_scan_time !== lastScanTime) {
+                        console.log('Directory changed, refreshing page...');
+                        lastScanTime = data.last_scan_time;
+                        location.reload();
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking for directory changes:', error);
+            }
+        }
+
+        // Start checking for changes every second
+        setInterval(checkForChanges, 1000);
+
         function changeSize() {
             const size = document.getElementById('size').value;
             const pageSize = document.getElementById('page_size').value;

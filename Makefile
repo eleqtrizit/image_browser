@@ -16,8 +16,8 @@ cov:  ## Run tests with coverage
 	python -m pytest tests/ --cov=image_browser --cov-report=html --cov-report=term-missing
 
 lint:  ## Run linters
-	flake8 *.py
-	mypy *.py
+	flake8 image_browser/ tests/
+	mypy image_browser/
 
 format:  ## Format code
 	autopep8 -a  --in-place --recursive .
